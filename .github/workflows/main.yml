@@ -83,7 +83,7 @@ jobs:
            -Dkey="$key"
 
   deployUat:
-    needs: build
+    needs: deployDev
     runs-on: ubuntu-latest
     steps:
       - name: Checkout this repo
