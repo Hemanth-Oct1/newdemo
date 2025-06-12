@@ -43,7 +43,7 @@ jobs:
           name: mule-artifact
           path: target/*.jar
 
-  deploy:
+  deployDev:
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -82,3 +82,41 @@ jobs:
            -Dmule.env=dev \
            -Dkey="$key"
 
+  deployUat:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v3
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: mule-artifact
+
+      - name: Deploy to CloudHub (UAT)
+        env:
+          USERNAME: ${{ secrets.CONNECTED_APP_CLIENT_ID }}
+          PASSWORD: ${{ secrets.CONNECTED_APP_CLIENT_SECRET }}
+          Business_Group_Id: ${{ secrets.Business_Group_Id }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID_UAT }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_UAT }}
+          key: ${{ secrets.KEY}}
+        run: |
+          mvn deploy -DmuleDeploy \
+           -Danypoint.username="$USERNAME" \
+           -Danypoint.password="$PASSWORD" \
+           -Danypoint.businessGroup="$Business_Group_Id" \
+           -Danypoint.platform.client_id="$CLIENT_ID" \
+           -Danypoint.platform.client_secret="$CLIENT_SECRET" \
+           -Denv=UAT \
+           -Dmule.env=uat \
+           -Dkey="$key"
