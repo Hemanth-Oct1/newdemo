@@ -1,1 +1,122 @@
+name: Build and Deploy to Dev
 
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+    
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v3
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: 8
+
+      - name: Build with Maven
+        run: mvn -B clean package --file pom.xml
+
+      - name: Stamp artifact file name with commit hash
+        run: |
+          artifactName=$(ls target/*.jar | head -1)
+          commitHash=$(git rev-parse --short "$GITHUB_SHA")
+          stampedArtifactName=$(echo $artifactName | sed "s/.jar/-$commitHash.jar/")
+          mv $artifactName $stampedArtifactName
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: mule-artifact
+          path: target/*.jar
+
+  deployDev:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v3
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: mule-artifact
+
+      - name: Deploy to CloudHub (Dev)
+        env:
+          USERNAME: ${{ secrets.CONNECTED_APP_CLIENT_ID }}
+          PASSWORD: ${{ secrets.CONNECTED_APP_CLIENT_SECRET }}
+          Business_Group_Id: ${{ secrets.Business_Group_Id }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          key: ${{ secrets.KEY}}
+        run: |
+          mvn deploy -DmuleDeploy \
+           -Danypoint.username="$USERNAME" \
+           -Danypoint.password="$PASSWORD" \
+           -Danypoint.businessGroup="$Business_Group_Id" \
+           -Danypoint.platform.client_id="$CLIENT_ID" \
+           -Danypoint.platform.client_secret="$CLIENT_SECRET" \
+           -Denv=Dev \
+           -Dmule.env=dev \
+           -Dkey="$key"
+
+  deployUat:
+    needs: deployDev
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v3
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: mule-artifact
+
+      - name: Deploy to CloudHub (UAT)
+        env:
+          USERNAME: ${{ secrets.CONNECTED_APP_CLIENT_ID }}
+          PASSWORD: ${{ secrets.CONNECTED_APP_CLIENT_SECRET }}
+          Business_Group_Id: ${{ secrets.Business_Group_Id }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID_UAT }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_UAT }}
+          key: ${{ secrets.KEY}}
+        run: |
+          mvn deploy -DmuleDeploy \
+           -Danypoint.username="$USERNAME" \
+           -Danypoint.password="$PASSWORD" \
+           -Danypoint.businessGroup="$Business_Group_Id" \
+           -Danypoint.platform.client_id="$CLIENT_ID" \
+           -Danypoint.platform.client_secret="$CLIENT_SECRET" \
+           -Denv=UAT \
+           -Dmule.env=uat \
+           -Dkey="$key"
